@@ -41,7 +41,7 @@ scene.add(stars);
 // check here for more datasets ...
 // https://github.com/martynafford/natural-earth-geojson
 // non-geojson datasets: https://www.naturalearthdata.com/downloads/
-fetch('./geojson/ne_110m_land.json')
+fetch('./geojson/ne_110m_admin_0_countries.json')
   .then(response => {
     console.log('Fetch response:', response.status);
     return response.text();
