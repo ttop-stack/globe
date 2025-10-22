@@ -25,6 +25,8 @@ let countryMeshes3D = new Map(); // Map country names to their 3D meshes
 let countryMeshes2D = new Map(); // Map country names to their 2D meshes
 let selectedCountry = null;
 let highlightedMesh = null;
+let hoveredMesh = null;
+let pinPoint = null;
 
 scene.add(globeGroup);
 scene.add(flatGroup);
@@ -32,6 +34,44 @@ scene.add(flatGroup);
 // Raycaster for click detection
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+
+// Create pinpoint indicator
+function createPinPoint() {
+  const pinGroup = new THREE.Group();
+  
+  // Pin body (vertical line)
+  const pinGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.15, 8);
+  const pinMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
+  const pin = new THREE.Mesh(pinGeometry, pinMaterial);
+  pin.position.y = 0.075;
+  
+  // Pin head (sphere at top)
+  const headGeometry = new THREE.SphereGeometry(0.03, 16, 16);
+  const headMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
+  const head = new THREE.Mesh(headGeometry, headMaterial);
+  head.position.y = 0.15;
+  
+  // Pin shadow/base (small circle at bottom)
+  const baseGeometry = new THREE.CircleGeometry(0.02, 16);
+  const baseMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0xFF0000, 
+    transparent: true, 
+    opacity: 0.5,
+    side: THREE.DoubleSide 
+  });
+  const base = new THREE.Mesh(baseGeometry, baseMaterial);
+  base.rotation.x = -Math.PI / 2;
+  
+  pinGroup.add(pin);
+  pinGroup.add(head);
+  pinGroup.add(base);
+  pinGroup.visible = false;
+  
+  scene.add(pinGroup);
+  return pinGroup;
+}
+
+pinPoint = createPinPoint();
 
 const geometry = new THREE.SphereGeometry(2);
 const lineMat = new THREE.LineBasicMaterial({ 
@@ -173,6 +213,89 @@ function onCountryClick(event) {
   }
 }
 
+// Hover detection for pinpoint indicator
+function onMouseMove(event) {
+  // Calculate mouse position
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  // Update raycaster
+  raycaster.setFromCamera(mouse, camera);
+
+  // Get intersected objects from the active group
+  const activeGroup = is3D ? globeGroup : flatGroup;
+  const intersects = raycaster.intersectObjects(activeGroup.children, true);
+
+  if (intersects.length > 0) {
+    // Find the country group
+    let countryGroup = intersects[0].object;
+    while (countryGroup.parent && !countryGroup.userData.name) {
+      countryGroup = countryGroup.parent;
+    }
+
+    if (countryGroup.userData && countryGroup.userData.name) {
+      // Show pinpoint at intersection point
+      const point = intersects[0].point;
+      pinPoint.position.copy(point);
+      
+      // Orient pinpoint correctly
+      if (is3D) {
+        // Point towards center of globe
+        pinPoint.lookAt(0, 0, 0);
+        pinPoint.rotateX(Math.PI);
+      } else {
+        // In 2D mode, pin stands upright
+        pinPoint.rotation.set(0, 0, 0);
+      }
+      
+      pinPoint.visible = true;
+      
+      // Remove hover effect from previous country
+      if (hoveredMesh && hoveredMesh !== highlightedMesh) {
+        hoveredMesh.children.forEach(child => {
+          if (child.material && child instanceof THREE.Line) {
+            child.material.color.setHex(0x80FF80);
+          }
+        });
+      }
+      
+      // Add hover effect to current country (lighter green)
+      if (countryGroup !== highlightedMesh) {
+        hoveredMesh = countryGroup;
+        countryGroup.children.forEach(child => {
+          if (child.material && child instanceof THREE.Line) {
+            child.material.color.setHex(0xAAFFAA);
+          }
+        });
+      }
+      
+      // Change cursor
+      renderer.domElement.style.cursor = 'pointer';
+      
+      // Show tooltip with country name
+      showTooltip(countryGroup.userData.name, event.clientX, event.clientY);
+      
+      return;
+    }
+  }
+  
+  // No country hovered
+  pinPoint.visible = false;
+  renderer.domElement.style.cursor = 'default';
+  hideTooltip();
+  
+  // Remove hover effect
+  if (hoveredMesh && hoveredMesh !== highlightedMesh) {
+    hoveredMesh.children.forEach(child => {
+      if (child.material && child instanceof THREE.Line) {
+        child.material.color.setHex(0x80FF80);
+      }
+    });
+    hoveredMesh = null;
+  }
+}
+
 function selectCountry(countryData) {
   // Clear previous highlight
   if (highlightedMesh) {
@@ -251,8 +374,43 @@ function updateCountryInfo(countryData) {
   `;
 }
 
+// Tooltip for hover
+function showTooltip(text, x, y) {
+  let tooltip = document.getElementById('countryTooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'countryTooltip';
+    tooltip.style.position = 'fixed';
+    tooltip.style.padding = '8px 12px';
+    tooltip.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+    tooltip.style.color = 'white';
+    tooltip.style.borderRadius = '4px';
+    tooltip.style.fontSize = '14px';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.zIndex = '10000';
+    tooltip.style.fontFamily = 'Arial, sans-serif';
+    tooltip.style.whiteSpace = 'nowrap';
+    document.body.appendChild(tooltip);
+  }
+  
+  tooltip.textContent = text;
+  tooltip.style.left = (x + 15) + 'px';
+  tooltip.style.top = (y - 10) + 'px';
+  tooltip.style.display = 'block';
+}
+
+function hideTooltip() {
+  const tooltip = document.getElementById('countryTooltip');
+  if (tooltip) {
+    tooltip.style.display = 'none';
+  }
+}
+
 // Add click listener
 renderer.domElement.addEventListener('click', onCountryClick, false);
+
+// Add hover listener
+renderer.domElement.addEventListener('mousemove', onMouseMove, false);
 
 function animate() {
   requestAnimationFrame(animate);
