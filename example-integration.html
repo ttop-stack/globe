@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Globe Integration Example</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #1a1a1a;
+      color: white;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      height: 100vh;
+    }
+    
+    #globe-section {
+      position: relative;
+    }
+    
+    #news-section {
+      background-color: #2a2a2a;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    #news-section h2 {
+      margin-top: 0;
+      color: #80FF80;
+    }
+    
+    .news-item {
+      background-color: #3a3a3a;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      border-left: 3px solid #80FF80;
+    }
+    
+    .news-item h3 {
+      margin-top: 0;
+      color: #fff;
+    }
+    
+    .news-item p {
+      color: #ccc;
+      font-size: 14px;
+    }
+    
+    .placeholder {
+      text-align: center;
+      color: #666;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="globe-section">
+      <!-- Globe will be embedded here via iframe or direct integration -->
+      <iframe 
+        src="index.html" 
+        style="width: 100%; height: 100%; border: none;"
+        id="globeFrame"
+      ></iframe>
+    </div>
+    
+    <div id="news-section">
+      <h2>News Feed</h2>
+      <div class="placeholder">
+        <p>👆 Click on a country to view news</p>
+      </div>
+      <div id="news-list"></div>
+    </div>
+  </div>
+
+  <script>
+    // Listen for country selection from iframe
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'countrySelected') {
+        const country = event.data.country;
+        console.log('Country selected from iframe:', country);
+        displayNewsForCountry(country);
+      }
+    });
+
+    // Also listen for direct events (if not using iframe)
+    window.addEventListener('countrySelected', (event) => {
+      const country = event.detail;
+      console.log('Country selected directly:', country);
+      displayNewsForCountry(country);
+    });
+
+    function displayNewsForCountry(country) {
+      const newsSection = document.getElementById('news-section');
+      const newsList = document.getElementById('news-list');
+      const placeholder = document.querySelector('.placeholder');
+      
+      if (placeholder) {
+        placeholder.style.display = 'none';
+      }
+      
+      newsSection.querySelector('h2').textContent = `News from ${country.name}`;
+      
+      // Simulate fetching news (replace with your actual API call)
+      const mockNews = generateMockNews(country);
+      
+      newsList.innerHTML = mockNews.map(article => `
+        <div class="news-item">
+          <h3>${article.title}</h3>
+          <p>${article.description}</p>
+          <small style="color: #888;">${article.date}</small>
+        </div>
+      `).join('');
+    }
+
+    function generateMockNews(country) {
+      // Replace this with actual API call to your news aggregator
+      // Example: fetch(`/api/news/country/${country.code}`)
+      
+      return [
+        {
+          title: `Breaking News from ${country.name}`,
+          description: 'This is a sample news article. Replace with real news from your API.',
+          date: new Date().toLocaleDateString()
+        },
+        {
+          title: `Economy Update in ${country.name}`,
+          description: 'Connect this to your news aggregator backend to show real articles.',
+          date: new Date().toLocaleDateString()
+        },
+        {
+          title: `Sports Highlights from ${country.name}`,
+          description: 'Your news API should filter articles by country code: ' + country.code,
+          date: new Date().toLocaleDateString()
+        }
+      ];
+    }
+
+    // Example: How to call your actual API
+    async function fetchRealNews(countryCode) {
+      try {
+        const response = await fetch(`/api/news/country/${countryCode}`);
+        const news = await response.json();
+        return news;
+      } catch (error) {
+        console.error('Error fetching news:', error);
+        return [];
+      }
+    }
+  </script>
+</body>
+</html>

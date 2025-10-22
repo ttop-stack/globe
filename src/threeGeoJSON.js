@@ -1,31 +1,53 @@
 import * as THREE from 'three';
 
-export function drawThreeGeo({ json, radius, materialOptions, flat = false }) {
+export function drawThreeGeo({ json, radius, materialOptions, flat = false, interactive = false }) {
   const group = new THREE.Group();
+  const countryMeshes = new Map();
   
   if (!json || !json.features) {
     console.error('Invalid GeoJSON data');
-    return group;
+    return { group, countryMeshes };
   }
 
-  const defaultMaterial = new THREE.LineBasicMaterial({
+  const lineMaterial = new THREE.LineBasicMaterial({
     color: materialOptions.color || 0xffffff,
   });
 
+  const meshMaterial = new THREE.MeshBasicMaterial({
+    color: materialOptions.color || 0x80FF80,
+    transparent: true,
+    opacity: 0.0, // Invisible but clickable
+    side: THREE.DoubleSide,
+  });
+
   json.features.forEach(feature => {
+    const countryName = feature.properties.NAME || feature.properties.name || 'Unknown';
+    const countryCode = feature.properties.ISO_A3 || feature.properties.iso_a3 || '';
+    const countryGroup = new THREE.Group();
+    countryGroup.userData = {
+      name: countryName,
+      code: countryCode,
+      properties: feature.properties
+    };
+
     if (feature.geometry && feature.geometry.type === 'Polygon') {
-      drawPolygon(feature.geometry.coordinates, radius, defaultMaterial, group, flat);
+      drawPolygon(feature.geometry.coordinates, radius, lineMaterial, meshMaterial, countryGroup, flat, interactive);
     } else if (feature.geometry && feature.geometry.type === 'MultiPolygon') {
       feature.geometry.coordinates.forEach(polygon => {
-        drawPolygon(polygon, radius, defaultMaterial, group, flat);
+        drawPolygon(polygon, radius, lineMaterial, meshMaterial, countryGroup, flat, interactive);
       });
+    }
+
+    if (countryGroup.children.length > 0) {
+      group.add(countryGroup);
+      countryMeshes.set(countryName, countryGroup);
     }
   });
 
-  return group;
+  return { group, countryMeshes };
 }
 
-function drawPolygon(coordinates, radius, material, group, flat) {
+function drawPolygon(coordinates, radius, lineMaterial, meshMaterial, group, flat, interactive) {
   coordinates.forEach(ring => {
     const points = [];
     ring.forEach(coord => {
@@ -38,9 +60,37 @@ function drawPolygon(coordinates, radius, material, group, flat) {
     });
 
     if (points.length > 1) {
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const line = new THREE.Line(geometry, material);
+      // Draw outline
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(lineGeometry, lineMaterial);
       group.add(line);
+
+      // Add clickable mesh if interactive
+      if (interactive && points.length >= 3) {
+        try {
+          const shape = new THREE.Shape();
+          points.forEach((point, i) => {
+            if (i === 0) {
+              shape.moveTo(point.x, point.y);
+            } else {
+              shape.lineTo(point.x, point.y);
+            }
+          });
+
+          const shapeGeometry = new THREE.ShapeGeometry(shape);
+          const mesh = new THREE.Mesh(shapeGeometry, meshMaterial.clone());
+          
+          // Position mesh correctly
+          if (!flat) {
+            mesh.lookAt(0, 0, 0);
+          }
+          mesh.position.copy(points[0]);
+          
+          group.add(mesh);
+        } catch (e) {
+          // Some polygons might fail, skip them
+        }
+      }
     }
   });
 }
